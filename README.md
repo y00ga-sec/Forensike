@@ -12,4 +12,4 @@ At the time of writing, I have not encountered a specific EDR technology that ha
 
 Here is a demo : https://youtu.be/THuil2RaqJY
 
-If you want more details about the tool or Forensics techniques applied for offensive security : you can check this article I wrote : 
+If you want more details about the tool or Forensics techniques applied for offensive security : you can check this article I wrote : https://publish.obsidian.md/yooga-sec/Forensike%2C+or+Forensics+for+bad+guys
