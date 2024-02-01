@@ -16,8 +16,8 @@ If you want more details about the tool or Forensics techniques applied for offe
 
 ## Installation
 
-Main installation is WinDBG on your system : https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/
-The script directly calls the WinDBG executable, so it needs to be accessible from anywhere on your system. So make sure that the WinDBG executable you use is in your PATH !
+- Main installation is WinDBG on your system : https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/
+- The script directly calls the WinDBG executable, so it needs to be accessible from anywhere on your system. So make sure that the WinDBG executable you use is in your PATH !
 
 ## Usage :
 
