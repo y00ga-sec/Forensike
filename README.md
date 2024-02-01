@@ -10,6 +10,6 @@ Forensike guides you by giving you the space available on the target so that you
 
 At the time of writing, I have not encountered a specific EDR technology that has a default policy against the generation of Windows Crash dumps. As creating a Windows Crash dump is mostly part of a legitimate forensics behavior, the EDR I have worked against in my engagements and personal tests never blocked the writing of DumpIt on the target's disk nor the generation of final crash dump file. Like many other RAM acquisition tools, the driver used to access physical memory is signed, preventing EDRs from blocking them as soon as they start acquiring memory. I like to consider this attack as an extension of BYOVD attacks (Bring Your Own Vulnerable Driver)
 
-Here is a demo :
+Here is a demo : https://youtu.be/THuil2RaqJY
 
 If you want more details about the tool or Forensics techniques applied for offensive security : you can check this article I wrote : 
