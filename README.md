@@ -25,7 +25,13 @@ The script directly calls the WinDBG executable, so it needs to be accessible fr
 - `target` : Give it a target. Only takes a netbios name. If you have DNS troubles in the environment you are working in, just add the target name and IP in your hosts file, the tool while retrieve the IP this way
 - `toolsDir` : Specify the folder in which you put your DumpIt executable so that Forensike can transfer it on the target and initiates Crash Dump generation
 - `toolsDir` : Specify the folder in which you want to write the `forensike_results.txt` with parsed hashes. The script also provides you with 2 files `lsass.txt` which contains the LSASS EPROCESS address in the crash dump you will generate and the `hashes.txt` which is the raw output of mimilib.dll. If the script did not properly quit or if you need to debug it, these 2 files can help you.
-- he script uses WMI queries to retrieve some information
+- The script uses WMI queries to retrieve some information
 - Disk space Estimation : The script roughly calculates how large the final crash dump will be on the target system and tell you how much space remains on target's C:\, so you know if you have enough space before lauching the attack
 
 Enjoy !
+
+
+TO DO :
+
+- Kerberos ticket dumping
+- Check if other disks exist on the target and how much space left
