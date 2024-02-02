@@ -6,7 +6,7 @@ The script will then connect to the machine to retrieve some info about it that 
 
 This tool combines WMI queries, forensics and debugging techniques to extract NT hashes from the target LSASS process without directly reading LSASS memory.
 
-Forensike guides you by giving you the space available on the target so that you don't saturate its disk as well as the current logged in user so that you know if the target if worth dumping its RAM.
+Forensike guides you by giving you the space available on the target so that you don't saturate its disk as well as the current logged in user so that you know if the target is worth dumping its RAM.
 
 At the time of writing, I have not encountered a specific EDR technology that has a default policy against the generation of Windows Crash dumps. As creating a Windows Crash dump is mostly part of a legitimate forensics behavior, the EDR I have worked against in my engagements and personal tests never blocked the writing of DumpIt on the target's disk nor the generation of final crash dump file. Like many other RAM acquisition tools, the driver used to access physical memory is signed, preventing EDRs from blocking them as soon as they start acquiring memory. I like to consider this attack as an extension of BYOVD attacks (Bring Your Own Vulnerable Driver)
 
