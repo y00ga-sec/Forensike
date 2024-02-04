@@ -35,3 +35,4 @@ TO DO :
 
 - Kerberos ticket dumping
 - Check if other disks exist on the target and how much space left
+- EDR detection
