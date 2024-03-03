@@ -203,4 +203,3 @@ if ($confirmation -ne 'Y' -and $confirmation -ne 'y') {
 	echo "====================================================================="
 	Write-Host -ForegroundColor DarkGreen "Hashes await you at $dumpDir\forensike_results.txt, have fun ..."
 	echo "====================================================================="
-	}
