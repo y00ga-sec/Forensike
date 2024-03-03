@@ -65,12 +65,9 @@ echo ""
 #Get system info
 	$targetName = Get-WMIObject -class Win32_ComputerSystem -ComputerName $target | ForEach-Object Name
 	$targetIP = Get-WMIObject -class Win32_NetworkAdapterConfiguration -ComputerName $target -Filter "IPEnabled='TRUE'" | Where {$_.IPAddress} | Select -ExpandProperty IPAddress | Where{$_ -notlike "*:*"}
-	$mem = [math]::Round((Get-WmiObject Win32_LogicalDisk -ComputerName $target | Where-Object {$_.DriveType -eq 3}).FreeSpace / 1GB, 3)
-	$mfg = Get-WmiObject -class Win32_Computersystem -ComputerName $target | select -ExpandProperty manufacturer
-	$model = Get-WmiObject Win32_Computersystem -ComputerName $target | select -ExpandProperty model
-	$pctype = Get-WmiObject Win32_Computersystem -ComputerName $target | select -ExpandProperty PCSystemType
-	$sernum = Get-wmiobject Win32_Bios -ComputerName $target | select -ExpandProperty SerialNumber
+	$mem = [math]::Round((Get-WmiObject Win32_LogicalDisk -ComputerName $target | Where-Object {$_.DriveType -eq 3} | Measure-Object -Property FreeSpace -Sum).Sum / 1GB, 3)
 	$tmzn = Get-WmiObject -class Win32_TimeZone -Computer $target | select -ExpandProperty caption
+
 
 #Display logged in user info (if any)	
 	if ($expproc = gwmi win32_process -computer $target -Filter "Name = 'explorer.exe'") {
@@ -84,43 +81,43 @@ echo ""
 echo ""
 echo "====================================================================="
 Write-Host -ForegroundColor White "==[ $targetName - $targetIP"
-
-$arch = Get-WmiObject -Class Win32_Processor -ComputerName $target | foreach {$_.AddressWidth}
-
 Write-Host -ForegroundColor White "==[ Total memory size: $mem GB"
-Write-Host -ForegroundColor White "==[ Manufacturer: $mfg"
-Write-Host -ForegroundColor White "==[ Model: $model"
-Write-Host -ForegroundColor White "==[ System Type: $pctype"
-Write-Host -ForegroundColor White "==[ Serial Number: $sernum"
 Write-Host -ForegroundColor White "==[ Timezone: $tmzn"
 Write-Host -ForegroundColor White "==[ Current logged on user: $currUser"
-	
 echo "====================================================================="
 echo ""
 
-### Estimate the Windows Crash Dump final size
-	# Get the total physical memory in bytes
-	$physicalMemory = Get-WMIObject Win32_ComputerSystem -ComputerName $target | Select-Object -ExpandProperty TotalPhysicalMemory
+# Estimate the Windows Crash Dump final size
+# Get the total physical memory in bytes from the remote machine
+$physicalMemory = Get-WmiObject Win32_ComputerSystem -ComputerName $target | Select-Object -ExpandProperty TotalPhysicalMemory
 
-	# Convert bytes to gigabytes for a more readable result
-	$estimatedDumpSizeGB = [math]::Round($physicalMemory / 1GB, 3)
+# Convert bytes to gigabytes for a more readable result
+$estimatedDumpSizeGB = [math]::Round($physicalMemory / 1GB, 3)
 
-Write-Host -ForegroundColor DarkRed -BackgroundColor Black "[+] WARNING"
-Write-Host -ForegroundColor White "Estimated Windows Crash Dump ~ " -nonewline 
-Write-Host -ForegroundColor Green "$estimatedDumpSizeGB GB"
-Write-Host -ForegroundColor White "Available disk space = " -nonewline
-Write-Host -ForegroundColor Green "$mem GB"
+Write-Host "Estimated final Windows Crash Dump size is " -nonewline
+Write-Host -ForegroundColor Green "$estimatedDumpSizeGB " -nonewline
+Write-Host "GB"
 
+# Get all the logical disks from the remote machine
+$disks = Get-WmiObject -Class Win32_LogicalDisk -ComputerName $target -Filter "DriveType = 3"  # DriveType 3 is for local disks
 
-# Prompt the user for input
-$response = Read-Host "[+] Do you want to proceed with Windows Crash Dump acquisition ? (Yes/No)"
+# Find the disk with the most available space
+$mostSpaceDisk = $disks | Sort-Object -Property FreeSpace -Descending | Select-Object -First 1
+$mostSpaceAvailableGB = [math]::Round($mostSpaceDisk.FreeSpace / 1GB, 3)
 
-# Convert the response to lowercase for case-insensitive comparison
-$response = $response.ToLower()
-
-# Check if the response is "yes"
-if ($response -eq "yes") {
-
+# Prompt the user to validate the disk selection
+Write-Host "The disk with the most available space for " -nonewline
+Write-Host -ForegroundColor Green "$target " -nonewline
+Write-Host "is " -nonewline
+Write-Host -ForegroundColor Green "$($mostSpaceDisk.DeviceID) " -nonewline
+Write-Host "with " -nonewline
+Write-Host -ForegroundColor Green "$mostSpaceAvailableGB " -nonewline 
+Write-Host "GB available."
+$confirmation = Read-Host "Do you want to use this disk? (Y/N)"
+if ($confirmation -ne 'Y' -and $confirmation -ne 'y') {
+    Write-Host "Operation cancelled by user."
+    Exit
+}
 ################
 ##Set up environment on remote system. Forensike folder for memtools and art folder for memory.##
 ################
@@ -207,7 +204,3 @@ if ($response -eq "yes") {
 	Write-Host -ForegroundColor DarkGreen "Hashes await you at $dumpDir\forensike_results.txt, have fun ..."
 	echo "====================================================================="
 	}
-
-else {
-    Write-Host -ForegroundColor DarkGreen "Script aborted by user, See you space cowboy ..."
-}
