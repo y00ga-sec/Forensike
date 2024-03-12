@@ -13,7 +13,7 @@
 	This the file path location of the tools on the analysis system.
 
 .PARAMETER DumpDir
-	This is the file path location you want the memory dumped. (On analysis system or other location like UNC path to server share)
+	This is the path you want the final results text file to be written. This folder will also contain both lsass.txt and hashes.txt
 
 
 .NOTEs:  
