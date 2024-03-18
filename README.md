@@ -37,4 +37,4 @@ TO DO :
 - Check if other disks exist on the target and how much space left (✅)
 - EDR detection
 - Memory acquisition tool choice
-- Is WinDBG available on the attacker system
+- Is WinDBG available on the attacker system (✅)
