@@ -87,6 +87,28 @@ Write-Host -ForegroundColor White "==[ Current logged on user: $currUser"
 echo "====================================================================="
 echo ""
 
+## Check prerequisite
+# Check if WINDBG is installed before running
+Function Test-WinDBG
+{
+    $oldPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'stop'
+    try {
+        if (-not (Get-Command "WindbgX.exe" -ErrorAction SilentlyContinue)) {
+            throw "WinDBGx is NOT installed on this system. Please install it first. If installed, try adding it in your path"
+        }
+        Write-Host -ForegroundColor Green "WinDBGx is installed on this system"
+    }
+    Catch {
+        throw $_.Exception
+    }
+    Finally {
+        $ErrorActionPreference = $oldPreference
+    }
+}
+
+Test-WinDBG
+
 # Estimate the Windows Crash Dump final size
 # Get the total physical memory in bytes from the remote machine
 $physicalMemory = Get-WmiObject Win32_ComputerSystem -ComputerName $target | Select-Object -ExpandProperty TotalPhysicalMemory
