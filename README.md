@@ -26,7 +26,7 @@ If you want more details about the tool or Forensics techniques applied for offe
 - `toolsDir` : Specify the folder in which you put your DumpIt executable so that Forensike can transfer it on the target and initiates Crash Dump generation
 - `toolsDir` : Specify the folder in which you want to write the `forensike_results.txt` with parsed hashes. The script also provides you with 2 files `lsass.txt` which contains the LSASS EPROCESS address in the crash dump you will generate and the `hashes.txt` which is the raw output of mimilib.dll. If the script did not properly quit or if you need to debug it, these 2 files can help you.
 - The script uses WMI queries to retrieve some information
-- Disk space Estimation : The script roughly calculates how large the final crash dump will be on the target system and tell you how much space remains on target's C:\, so you know if there is have enough space to welcome the crash dump before lauching the attack
+- Disk space Estimation : The script roughly calculates how large the final crash dump will be on the target system and tell you which target disk has the most avalaible space, so you know if there is have enough space on the target to welcome the crash dump before lauching the attack
 
 Enjoy !
 
@@ -37,3 +37,4 @@ TO DO :
 - Check if other disks exist on the target and how much space left (✅)
 - EDR detection
 - Memory acquisition tool choice
+- Is WinDBG available on the attacker system
