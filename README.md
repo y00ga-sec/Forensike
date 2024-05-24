@@ -12,7 +12,7 @@ At the time of writing, I have not encountered a specific EDR technology that ha
 
 Here is a demo : https://youtu.be/THuil2RaqJY
 
-If you want more details about the tool or Forensics techniques applied for offensive security : you can check this article I wrote : https://publish.obsidian.md/yooga-sec/Forensike%2C+or+Forensics+for+bad+guys
+If you want more details about the tool or Forensics techniques applied for offensive security : you can check this article I wrote : https://blog.y00ga.lol/PUBLISH/Forensike%2C+or+Forensics+for+bad+guys
 
 ## Installation
 
@@ -36,5 +36,4 @@ TO DO :
 - Kerberos ticket dumping
 - Check if other disks exist on the target and how much space left (✅)
 - EDR detection
-- Memory acquisition tool choice
 - Is WinDBG available on the attacker system (✅)
