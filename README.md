@@ -28,13 +28,14 @@ If you want more details about the tool or Forensics techniques applied for offe
 - The script uses WMI queries to retrieve some information
 - Disk space Estimation : The script roughly calculates how large the final crash dump will be on the target system and tell you which target disk has the most avalaible space, so you know if there is have enough space on the target to welcome the crash dump before lauching the attack
 - `Metadata` : Uses rcedit-x64.exe to tamper with DumpIt.exe metadate. Helps if you need bypassing detection rules based on filename or description AND if the EDR let's you load new executable broken signature 
+- `Kerberos` : Extracts Kerberos tickets from the target in `.kirbi` format. The script uses WMI to retrieve the LSASS PID, then triggers a minidump of LSASS via the built-in `comsvcs.dll MiniDump` method (no extra binary needed on the target). The minidump is pulled back to the attacker machine via the existing PSDrive mapping, and `mimikatz.exe` is run locally with `sekurlsa::minidump` + `sekurlsa::tickets /export` to write the `.kirbi` files to a `kirbi/` subfolder inside your `dumpDir`. Requires `mimikatz.exe` to be present in `toolsDir`. The exported tickets can then be used for Pass-the-Ticket attacks with Rubeus (`ptt`) or impacket (`ticketConverter.py` + any `-k` tool).
 
 Enjoy !
 
 
 TO DO :
 
-- Kerberos ticket dumping
+- Kerberos ticket dumping (✅)
 - Check if other disks exist on the target and how much space left (✅)
 - EDR detection
 - Is WinDBG available on the attacker system (✅)
