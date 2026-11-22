@@ -19,21 +19,10 @@ import argparse
 import io
 import os
 import re
-import shutil
 import struct
 import subprocess
 import sys
 from pathlib import Path
-
-
-def _find_tool(name):
-    """Find a CLI tool — first in our venv (pipx), then on PATH."""
-    venv_bin = Path(sys.executable).parent
-    for suffix in ("", ".exe"):
-        candidate = venv_bin / f"{name}{suffix}"
-        if candidate.exists():
-            return str(candidate)
-    return shutil.which(name)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -250,6 +239,31 @@ def _to_list(cmd):
     return cmd if isinstance(cmd, list) else [cmd]
 
 
+def _default_vol_cmd():
+    """Build default vol3 command that works inside pipx venvs."""
+    return [sys.executable, "-c",
+            "import sys; sys.argv[0]='vol'; "
+            "from volatility3.cli import main; main()"]
+
+
+_PYPYKATZ_BOOTSTRAP = """\
+import sys, importlib
+sys.argv[0] = 'pypykatz'
+for name in ('pypykatz.__main__', 'pypykatz.__amain__'):
+    try:
+        mod = importlib.import_module(name)
+        mod.main()
+        break
+    except ImportError:
+        continue
+"""
+
+
+def _default_pypykatz_cmd():
+    """Build default pypykatz command that works inside pipx venvs."""
+    return [sys.executable, "-c", _PYPYKATZ_BOOTSTRAP]
+
+
 def _run_vol(vol_cmd, dump_path, plugin, extra_args=None):
     """Run a vol3 plugin and return its stdout."""
     cmd = _to_list(vol_cmd) + ["-f", str(dump_path), "-q"]
@@ -350,14 +364,15 @@ def vol3_dump_lsass_memory(vol_cmd, dump_path, pid, output_dir):
 def extract_from_crashdump(
     dump_path,
     output_dir,
-    vol_cmd="vol",
-    pypykatz_cmd="pypykatz",
+    vol_cmd=None,
     kerberos_dir=None,
 ):
     """Full pipeline: crash dump → LSASS minidump → pypykatz → credentials.
 
     Returns (results_text, n_kirbi).
     """
+    if vol_cmd is None:
+        vol_cmd = _default_vol_cmd()
     dump_path  = Path(dump_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -417,14 +432,42 @@ def extract_from_crashdump(
 
     # ── Step 7: pypykatz ──
     print("[*] Running pypykatz on LSASS minidump ...")
-    cmd = _to_list(pypykatz_cmd) + ["lsa", "minidump", str(minidump_path)]
+
+    # Try Python API first (fastest, no subprocess overhead)
+    try:
+        from pypykatz.pypykatz import pypykatz as ppk
+        mimi = ppk.parse_minidump_file(str(minidump_path))
+        results_text = str(mimi)
+
+        n_kirbi = 0
+        if kerberos_dir:
+            kerberos_dir = Path(kerberos_dir)
+            kerberos_dir.mkdir(parents=True, exist_ok=True)
+            kdir = str(kerberos_dir.resolve())
+            for luid in mimi.logon_sessions:
+                for kcred in mimi.logon_sessions[luid].kerberos_creds:
+                    for ticket in kcred.tickets:
+                        ticket.to_kirbi(kdir)
+            for cred in mimi.orphaned_creds:
+                if cred.credtype == "kerberos":
+                    for ticket in cred.tickets:
+                        ticket.to_kirbi(kdir)
+            n_kirbi = len(list(kerberos_dir.glob("*.kirbi")))
+
+        return results_text, n_kirbi
+
+    except Exception:
+        pass
+
+    # Fallback: subprocess (handles AV blocks on import, broken installs)
+    ppk_cmd = _default_pypykatz_cmd()
+    cmd = _to_list(ppk_cmd) + ["lsa", "minidump", str(minidump_path)]
     if kerberos_dir:
         kerberos_dir = Path(kerberos_dir)
         kerberos_dir.mkdir(parents=True, exist_ok=True)
         cmd.extend(["-k", str(kerberos_dir)])
 
     result = subprocess.run(cmd, capture_output=True, text=True)
-
     if result.returncode != 0:
         print(f"[!] pypykatz error: {result.stderr.strip()[:300]}", file=sys.stderr)
 
@@ -450,25 +493,13 @@ def main():
                    help="Export .kirbi tickets to this directory")
     p.add_argument("--vol", default=None,
                    help="Volatility3 command (auto-detected)")
-    p.add_argument("--pypykatz", default=None,
-                   help="pypykatz command (auto-detected)")
     args = p.parse_args()
 
-    if args.vol:
-        vol_cmd = args.vol
-    else:
-        vol_cmd = [sys.executable, "-c",
-                   "from volatility3.cli import main; main()"]
-    if args.pypykatz:
-        pypykatz_cmd = args.pypykatz
-    else:
-        pypykatz_cmd = [sys.executable, "-c",
-                        "from pypykatz.pypykatz import main; main()"]
+    vol_cmd = args.vol if args.vol else _default_vol_cmd()
 
     text, n_kirbi = extract_from_crashdump(
         args.dump, args.output,
         vol_cmd=vol_cmd,
-        pypykatz_cmd=pypykatz_cmd,
         kerberos_dir=args.kerberos_dir,
     )
 

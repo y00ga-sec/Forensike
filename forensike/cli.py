@@ -376,7 +376,10 @@ class Forensike:
         # Use python -m to invoke tools — avoids broken .exe stubs with pipx
         try:
             from volatility3 import cli as _vol3cli  # noqa: F401
+            # vol3 CLI parses sys.argv[0] as an argument — set it to 'vol'
+            # to avoid collision with vol3's own -c/--config flag
             self.vol_cmd = [sys.executable, "-c",
+                            "import sys; sys.argv[0]='vol'; "
                             "from volatility3.cli import main; main()"]
             good("volatility3 found")
         except ImportError:
@@ -384,15 +387,19 @@ class Forensike:
             warn("  pip install volatility3")
             sys.exit(1)
 
-        try:
-            import pypykatz as _ppk  # noqa: F401
-            self.pypykatz_cmd = [sys.executable, "-c",
-                                 "from pypykatz.pypykatz import main; main()"]
-            good("pypykatz found")
-        except ImportError:
+        ppk_found = False
+        for mod in ("pypykatz.pypykatz", "pypykatz.__main__", "pypykatz.__amain__", "pypykatz"):
+            try:
+                __import__(mod)
+                ppk_found = True
+                break
+            except Exception:
+                continue
+        if not ppk_found:
             warn("pypykatz not found — required to extract credentials from LSASS minidump")
             warn("  pip install pypykatz")
             sys.exit(1)
+        good("pypykatz found")
 
         if not self.dump_file:
             if not (self.tools_dir / "DumpIt.exe").exists():
@@ -507,7 +514,6 @@ class Forensike:
             dump_path     = str(dump_path),
             output_dir    = str(self.dump_dir),
             vol_cmd       = self.vol_cmd,
-            pypykatz_cmd  = self.pypykatz_cmd,
             kerberos_dir  = kirbi_dir,
         )
 
