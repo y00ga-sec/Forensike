@@ -428,7 +428,17 @@ def extract_from_crashdump(
     for path, base, size, ts in modules:
         builder.add_module(path, base, size, ts)
 
+    # Coalesce contiguous pages into large regions so pypykatz can
+    # find signatures that straddle page boundaries.
+    merged = []
     for vaddr, data in addr_space.read_all_regions():
+        if merged and vaddr == merged[-1][0] + len(merged[-1][1]):
+            merged[-1] = (merged[-1][0], merged[-1][1] + data)
+        else:
+            merged.append((vaddr, data))
+    print(f"    {len(merged)} regions after coalescing (from {len(addr_space._map)})")
+
+    for vaddr, data in merged:
         builder.add_region(vaddr, data)
 
     minidump_path = output_dir / "lsass.dmp"
