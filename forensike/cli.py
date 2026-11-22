@@ -116,6 +116,7 @@ class Forensike:
         self.start_time   = None
         self.mount_point  = None
         self._mounted     = False
+        self._win_drive   = None
 
     # ── connection ────────────────────────────────────────────────────
 
@@ -233,34 +234,41 @@ class Forensike:
         return self._mount_linux()
 
     def _mount_windows(self):
-        """Connect to \\\\target\\C$ via net use."""
+        """Map \\\\target\\C$ to a drive letter via net use.
+
+        Vol3 can't handle UNC paths — it strips the server name.
+        A mapped drive (e.g. Z:\\) gives vol3 a normal local-looking path.
+        """
         self._unc_root = f"\\\\{self.target}\\C$"
-        dump = Path(self._unc_root) / "Windows" / "Temp" / "Forensike" / self.DUMP_NAME
+        self._win_drive = None
 
-        # Already accessible (e.g. same domain session)?
-        if dump.exists():
-            self._mounted = True
-            good(f"UNC path accessible: {self._unc_root}")
-            return True
-
-        # Establish connection with credentials
-        info(f"Connecting to {self._unc_root} ...")
-        cmd = ["net", "use", self._unc_root]
+        # Build credentials part of the command
+        cred_args = []
         if self.username:
             user = f"{self.domain}\\{self.username}" if self.domain != "." else self.username
-            cmd += [f"/user:{user}"]
+            cred_args.append(f"/user:{user}")
         if self.password:
-            cmd.append(self.password)
+            cred_args.append(self.password)
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        if result.returncode != 0:
-            warn(f"net use failed: {result.stderr.strip()}")
-            warn(f"Try: net use {self._unc_root} /user:{self.domain}\\{self.username} <password>")
-            warn(f"Or use: --dump-file {self._unc_root}\\Windows\\Temp\\Forensike\\{self.DUMP_NAME}")
+        # Try mapping to a free drive letter (Z → D)
+        for letter in "ZYXWVUTSRQPONMLKJIHGFED":
+            drive = f"{letter}:"
+            result = subprocess.run(
+                ["net", "use", drive, self._unc_root] + cred_args,
+                capture_output=True, text=True,
+            )
+            if result.returncode == 0:
+                self._win_drive = drive
+                break
+
+        if not self._win_drive:
+            warn(f"Could not map a drive letter to {self._unc_root}")
+            warn(f"  net use: {result.stderr.strip()}")
             return False
 
         self._mounted = True
-        good(f"Connected to {self._unc_root}")
+        self.mount_point = Path(self._win_drive + "\\")
+        good(f"Mapped {self._unc_root} → {self._win_drive}")
         return True
 
     def _mount_linux(self):
@@ -308,9 +316,9 @@ class Forensike:
         if not self._mounted:
             return
         if sys.platform == "win32":
-            if hasattr(self, "_unc_root"):
-                info(f"Disconnecting {self._unc_root} ...")
-                subprocess.run(["net", "use", self._unc_root, "/delete", "/y"],
+            if self._win_drive:
+                info(f"Disconnecting {self._win_drive} ...")
+                subprocess.run(["net", "use", self._win_drive, "/delete", "/y"],
                                capture_output=True)
         else:
             if self.mount_point:
@@ -489,10 +497,7 @@ class Forensike:
             warn("Cannot access crash dump — aborting extraction")
             sys.exit(1)
 
-        if sys.platform == "win32":
-            p = Path(self._unc_root) / "Windows" / "Temp" / "Forensike" / self.DUMP_NAME
-        else:
-            p = self.mount_point / "Windows" / "Temp" / "Forensike" / self.DUMP_NAME
+        p = self.mount_point / "Windows" / "Temp" / "Forensike" / self.DUMP_NAME
 
         if not p.exists():
             warn(f"Crash dump not found at {p}")
