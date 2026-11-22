@@ -457,11 +457,13 @@ def main():
     if args.vol:
         vol_cmd = args.vol
     else:
-        vol_cmd = [sys.executable, "-m", "volatility3"]
+        vol_cmd = [sys.executable, "-c",
+                   "from volatility3.cli import main; main()"]
     if args.pypykatz:
         pypykatz_cmd = args.pypykatz
     else:
-        pypykatz_cmd = [sys.executable, "-m", "pypykatz"]
+        pypykatz_cmd = [sys.executable, "-c",
+                        "from pypykatz.pypykatz import main; main()"]
 
     text, n_kirbi = extract_from_crashdump(
         args.dump, args.output,
