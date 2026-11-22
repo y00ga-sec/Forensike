@@ -266,10 +266,9 @@ def _default_pypykatz_cmd():
 
 def _run_vol(vol_cmd, dump_path, plugin, extra_args=None):
     """Run a vol3 plugin and return its stdout."""
-    cmd = _to_list(vol_cmd) + ["-f", str(dump_path), "-q"]
+    cmd = _to_list(vol_cmd) + ["-f", str(dump_path), "-q", plugin]
     if extra_args:
         cmd.extend(extra_args)
-    cmd.append(plugin)
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0 and r.stderr.strip():
         lines = r.stderr.strip().splitlines()
