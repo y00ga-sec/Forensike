@@ -56,10 +56,8 @@ class VirtualAddressSpace:
     def __init__(self, regions, dump_path):
         self.dump_path = Path(dump_path)
         self._map = []          # (vaddr, size, file_offset)
-        offset = 0
-        for vaddr, size in regions:
-            self._map.append((vaddr, size, offset))
-            offset += size
+        for vaddr, size, file_offset in regions:
+            self._map.append((vaddr, size, file_offset))
 
     def read(self, vaddr, size):
         """Read *size* bytes starting at virtual address *vaddr*."""
@@ -348,9 +346,10 @@ def vol3_dump_lsass_memory(vol_cmd, dump_path, pid, output_dir):
         if not parts:
             continue
         try:
-            vaddr = int(parts[0], 16)
-            size  = int(parts[2], 16)
-            regions.append((vaddr, size))
+            vaddr  = int(parts[0], 16)
+            size   = int(parts[2], 16)
+            offset = int(parts[3], 16)
+            regions.append((vaddr, size, offset))
         except (ValueError, IndexError):
             continue
 
