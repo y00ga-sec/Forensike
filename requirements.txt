@@ -1,0 +1,7 @@
+# Preferred: pipx install .   (or pip install .)
+# This file is for legacy pip install -r requirements.txt usage.
+impacket>=0.11.0
+volatility3>=2.4.0
+pypykatz>=0.6.0
+# Optional — for --metadata PE obfuscation:
+# pefile>=2023.2.7

