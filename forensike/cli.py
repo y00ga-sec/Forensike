@@ -40,6 +40,18 @@ except ImportError:
 from .lsass_extract import extract_from_crashdump
 
 
+# ── Tool discovery ───────────────────────────────────────────────────
+
+def _find_tool(name):
+    """Find a CLI tool — first in our venv (pipx), then on PATH."""
+    venv_bin = Path(sys.executable).parent
+    for suffix in ("", ".exe"):
+        candidate = venv_bin / f"{name}{suffix}"
+        if candidate.exists():
+            return str(candidate)
+    return shutil.which(name)
+
+
 # ── Terminal helpers ──────────────────────────────────────────────────
 
 G   = "\033[92m"
@@ -315,8 +327,8 @@ class Forensike:
     # ── prerequisites ─────────────────────────────────────────────────
 
     def check_tools(self):
-        self.vol_cmd      = shutil.which("vol") or shutil.which("vol3")
-        self.pypykatz_cmd = shutil.which("pypykatz")
+        self.vol_cmd      = _find_tool("vol") or _find_tool("vol3")
+        self.pypykatz_cmd = _find_tool("pypykatz")
 
         if not self.vol_cmd:
             warn("volatility3 not found — required to parse crash dumps")

@@ -19,10 +19,21 @@ import argparse
 import io
 import os
 import re
+import shutil
 import struct
 import subprocess
 import sys
 from pathlib import Path
+
+
+def _find_tool(name):
+    """Find a CLI tool — first in our venv (pipx), then on PATH."""
+    venv_bin = Path(sys.executable).parent
+    for suffix in ("", ".exe"):
+        candidate = venv_bin / f"{name}{suffix}"
+        if candidate.exists():
+            return str(candidate)
+    return shutil.which(name)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -430,16 +441,19 @@ def main():
                    help="Output directory (default: ./forensike_out)")
     p.add_argument("-k", "--kerberos-dir", default=None,
                    help="Export .kirbi tickets to this directory")
-    p.add_argument("--vol", default="vol",
-                   help="Volatility3 command (default: vol)")
-    p.add_argument("--pypykatz", default="pypykatz",
-                   help="pypykatz command (default: pypykatz)")
+    p.add_argument("--vol", default=None,
+                   help="Volatility3 command (auto-detected)")
+    p.add_argument("--pypykatz", default=None,
+                   help="pypykatz command (auto-detected)")
     args = p.parse_args()
+
+    vol_cmd      = args.vol or _find_tool("vol") or _find_tool("vol3") or "vol"
+    pypykatz_cmd = args.pypykatz or _find_tool("pypykatz") or "pypykatz"
 
     text, n_kirbi = extract_from_crashdump(
         args.dump, args.output,
-        vol_cmd=args.vol,
-        pypykatz_cmd=args.pypykatz,
+        vol_cmd=vol_cmd,
+        pypykatz_cmd=pypykatz_cmd,
         kerberos_dir=args.kerberos_dir,
     )
 
