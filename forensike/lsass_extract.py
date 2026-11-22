@@ -462,10 +462,11 @@ def extract_from_crashdump(
 
         return results_text, n_kirbi
 
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"  [pypykatz API] {e}", file=sys.stderr)
 
     # Fallback: subprocess (handles AV blocks on import, broken installs)
+    print("  [pypykatz] falling back to subprocess ...")
     ppk_cmd = _default_pypykatz_cmd()
     cmd = _to_list(ppk_cmd) + ["lsa", "minidump", str(minidump_path)]
     if kerberos_dir:
@@ -474,8 +475,10 @@ def extract_from_crashdump(
         cmd.extend(["-k", str(kerberos_dir)])
 
     result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        print(f"[!] pypykatz error: {result.stderr.strip()[:300]}", file=sys.stderr)
+    if result.returncode != 0 and result.stderr.strip():
+        print(f"  [pypykatz] {result.stderr.strip()[:500]}", file=sys.stderr)
+    if not result.stdout.strip() and result.stderr.strip():
+        print(f"  [pypykatz stderr] {result.stderr.strip()[:500]}", file=sys.stderr)
 
     n_kirbi = 0
     if kerberos_dir:
