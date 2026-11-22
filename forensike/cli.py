@@ -373,20 +373,24 @@ class Forensike:
     # ── prerequisites ─────────────────────────────────────────────────
 
     def check_tools(self):
-        self.vol_cmd      = _find_tool("vol") or _find_tool("vol3")
-        self.pypykatz_cmd = _find_tool("pypykatz")
-
-        if not self.vol_cmd:
+        # Use python -m to invoke tools — avoids broken .exe stubs with pipx
+        try:
+            import volatility3  # noqa: F401
+            self.vol_cmd = [sys.executable, "-m", "volatility3"]
+            good(f"volatility3 found (via {sys.executable})")
+        except ImportError:
             warn("volatility3 not found — required to parse crash dumps")
             warn("  pip install volatility3")
             sys.exit(1)
-        good(f"volatility3 found: {self.vol_cmd}")
 
-        if not self.pypykatz_cmd:
+        try:
+            import pypykatz as _ppk  # noqa: F401
+            self.pypykatz_cmd = [sys.executable, "-m", "pypykatz"]
+            good(f"pypykatz found (via {sys.executable})")
+        except ImportError:
             warn("pypykatz not found — required to extract credentials from LSASS minidump")
             warn("  pip install pypykatz")
             sys.exit(1)
-        good(f"pypykatz found: {self.pypykatz_cmd}")
 
         if not self.dump_file:
             if not (self.tools_dir / "DumpIt.exe").exists():

@@ -245,15 +245,22 @@ class MinidumpBuilder:
 # Volatility3 CLI bridge
 # ══════════════════════════════════════════════════════════════════════
 
+def _to_list(cmd):
+    """Ensure cmd is a list (may be a string path or a list like [python, -m, ...])."""
+    return cmd if isinstance(cmd, list) else [cmd]
+
+
 def _run_vol(vol_cmd, dump_path, plugin, extra_args=None):
     """Run a vol3 plugin and return its stdout."""
-    cmd = [vol_cmd, "-f", str(dump_path), "-q"]
+    cmd = _to_list(vol_cmd) + ["-f", str(dump_path), "-q"]
     if extra_args:
         cmd.extend(extra_args)
     cmd.append(plugin)
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0 and r.stderr.strip():
-        print(f"  [vol3] {r.stderr.strip()[:200]}", file=sys.stderr)
+        lines = r.stderr.strip().splitlines()
+        err = lines[-1] if lines else r.stderr.strip()[:300]
+        print(f"  [vol3] {err}", file=sys.stderr)
     return r.stdout
 
 
@@ -410,7 +417,7 @@ def extract_from_crashdump(
 
     # ── Step 7: pypykatz ──
     print("[*] Running pypykatz on LSASS minidump ...")
-    cmd = [pypykatz_cmd, "lsa", "minidump", str(minidump_path)]
+    cmd = _to_list(pypykatz_cmd) + ["lsa", "minidump", str(minidump_path)]
     if kerberos_dir:
         kerberos_dir = Path(kerberos_dir)
         kerberos_dir.mkdir(parents=True, exist_ok=True)
@@ -447,8 +454,14 @@ def main():
                    help="pypykatz command (auto-detected)")
     args = p.parse_args()
 
-    vol_cmd      = args.vol or _find_tool("vol") or _find_tool("vol3") or "vol"
-    pypykatz_cmd = args.pypykatz or _find_tool("pypykatz") or "pypykatz"
+    if args.vol:
+        vol_cmd = args.vol
+    else:
+        vol_cmd = [sys.executable, "-m", "volatility3"]
+    if args.pypykatz:
+        pypykatz_cmd = args.pypykatz
+    else:
+        pypykatz_cmd = [sys.executable, "-m", "pypykatz"]
 
     text, n_kirbi = extract_from_crashdump(
         args.dump, args.output,
