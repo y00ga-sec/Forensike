@@ -223,9 +223,47 @@ class Forensike:
         except Exception:
             pass
 
-    # ── CIFS mount (Linux UNC equivalent) ─────────────────────────────
+    # ── Remote share access ─────────────────────────────────────────────
+    # Windows : UNC path (\\target\C$) — native, like the PowerShell version
+    # Linux   : CIFS mount (equivalent of UNC)
 
     def _mount(self):
+        if sys.platform == "win32":
+            return self._mount_windows()
+        return self._mount_linux()
+
+    def _mount_windows(self):
+        """Connect to \\\\target\\C$ via net use."""
+        self._unc_root = f"\\\\{self.target}\\C$"
+        dump = Path(self._unc_root) / "Windows" / "Temp" / "Forensike" / self.DUMP_NAME
+
+        # Already accessible (e.g. same domain session)?
+        if dump.exists():
+            self._mounted = True
+            good(f"UNC path accessible: {self._unc_root}")
+            return True
+
+        # Establish connection with credentials
+        info(f"Connecting to {self._unc_root} ...")
+        cmd = ["net", "use", self._unc_root]
+        if self.username:
+            user = f"{self.domain}\\{self.username}" if self.domain != "." else self.username
+            cmd += [f"/user:{user}"]
+        if self.password:
+            cmd.append(self.password)
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            warn(f"net use failed: {result.stderr.strip()}")
+            warn(f"Try: net use {self._unc_root} /user:{self.domain}\\{self.username} <password>")
+            warn(f"Or use: --dump-file {self._unc_root}\\Windows\\Temp\\Forensike\\{self.DUMP_NAME}")
+            return False
+
+        self._mounted = True
+        good(f"Connected to {self._unc_root}")
+        return True
+
+    def _mount_linux(self):
         """Mount //target/C$ via CIFS — Linux equivalent of UNC access."""
         self.mount_point = Path(f"/tmp/forensike_{self.target}_{os.getpid()}")
         self.mount_point.mkdir(parents=True, exist_ok=True)
@@ -267,15 +305,23 @@ class Forensike:
         return True
 
     def _unmount(self):
-        if self._mounted and self.mount_point:
-            info("Unmounting CIFS share ...")
-            subprocess.run(["umount", str(self.mount_point)],
-                           capture_output=True)
-            try:
-                self.mount_point.rmdir()
-            except Exception:
-                pass
-            self._mounted = False
+        if not self._mounted:
+            return
+        if sys.platform == "win32":
+            if hasattr(self, "_unc_root"):
+                info(f"Disconnecting {self._unc_root} ...")
+                subprocess.run(["net", "use", self._unc_root, "/delete", "/y"],
+                               capture_output=True)
+        else:
+            if self.mount_point:
+                info("Unmounting CIFS share ...")
+                subprocess.run(["umount", str(self.mount_point)],
+                               capture_output=True)
+                try:
+                    self.mount_point.rmdir()
+                except Exception:
+                    pass
+        self._mounted = False
 
     # ── recon ─────────────────────────────────────────────────────────
 
@@ -417,7 +463,7 @@ class Forensike:
     # ── access crash dump remotely ────────────────────────────────────
 
     def get_dump_path(self) -> Path:
-        """Return a local path to the crash dump (via mount or user-supplied)."""
+        """Return a path to the crash dump (UNC on Windows, mount on Linux)."""
         if self.dump_file:
             p = Path(self.dump_file)
             if not p.exists():
@@ -430,13 +476,17 @@ class Forensike:
             warn("Cannot access crash dump — aborting extraction")
             sys.exit(1)
 
-        p = self.mount_point / "Windows" / "Temp" / "Forensike" / self.DUMP_NAME
+        if sys.platform == "win32":
+            p = Path(self._unc_root) / "Windows" / "Temp" / "Forensike" / self.DUMP_NAME
+        else:
+            p = self.mount_point / "Windows" / "Temp" / "Forensike" / self.DUMP_NAME
+
         if not p.exists():
             warn(f"Crash dump not found at {p}")
             sys.exit(1)
 
-        good(f"Crash dump accessible at {p}")
-        good(f"  ({p.stat().st_size / (1024**3):.2f} GB — read remotely, NOT downloaded)")
+        size_gb = p.stat().st_size / (1024**3)
+        good(f"Crash dump accessible at {p}  ({size_gb:.2f} GB)")
         return p
 
     # ── credential extraction ─────────────────────────────────────────
