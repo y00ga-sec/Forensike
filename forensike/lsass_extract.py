@@ -264,11 +264,17 @@ def _default_pypykatz_cmd():
     return [sys.executable, "-c", _PYPYKATZ_BOOTSTRAP]
 
 
-def _run_vol(vol_cmd, dump_path, plugin, extra_args=None):
-    """Run a vol3 plugin and return its stdout."""
-    cmd = _to_list(vol_cmd) + ["-f", str(dump_path), "-q", plugin]
-    if extra_args:
-        cmd.extend(extra_args)
+def _run_vol(vol_cmd, dump_path, plugin, plugin_args=None, global_args=None):
+    """Run a vol3 plugin and return its stdout.
+
+    vol3 arg order: vol [global-args] PLUGIN [plugin-args]
+    """
+    cmd = _to_list(vol_cmd) + ["-f", str(dump_path), "-q"]
+    if global_args:
+        cmd.extend(global_args)
+    cmd.append(plugin)
+    if plugin_args:
+        cmd.extend(plugin_args)
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0 and r.stderr.strip():
         lines = r.stderr.strip().splitlines()
@@ -307,7 +313,7 @@ def vol3_system_info(vol_cmd, dump_path):
 def vol3_lsass_modules(vol_cmd, dump_path, pid):
     """Return [(name, base_addr, size)] for LSASS modules."""
     out = _run_vol(vol_cmd, dump_path, "windows.dlllist.DllList",
-                   ["--pid", str(pid)])
+                   plugin_args=["--pid", str(pid)])
     modules = []
     for line in out.splitlines():
         parts = line.split("\t") if "\t" in line else line.split()
@@ -333,7 +339,8 @@ def vol3_dump_lsass_memory(vol_cmd, dump_path, pid, output_dir):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     out = _run_vol(vol_cmd, dump_path, "windows.memmap.Memmap",
-                   ["--pid", str(pid), "--dump", "-o", str(output_dir)])
+                   plugin_args=["--pid", str(pid), "--dump"],
+                   global_args=["-o", str(output_dir)])
 
     regions = []
     for line in out.splitlines():
